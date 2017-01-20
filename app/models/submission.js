@@ -7,7 +7,7 @@ var answerSchema = require('./answer');
 
 var submissionSchema  = new schema({
 	id		 	: Number,
-	timestamp	: Number, 
+	timestamp	: Date, 
 
 	site        : siteSchema.schema,  
 	person 		: personSchema.schema,

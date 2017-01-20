@@ -14,6 +14,10 @@ var _ 			= require('underscore');
 // models
 var question    = require('./app/models/question');
 var submission 	= require('./app/models/submission');
+var tenant 		= require('./app/models/tenant');
+var site        = require('./app/models/site');
+var person		= require('./app/models/person');
+var answer      = require('./app/models/answer');
 
 // server config
 var port     	= process.env.PORT || 8080; 
@@ -50,6 +54,7 @@ router.get('/', function(req, res) {
 	res.json({ message: 'hooray! welcome to our api!' });	
 });
 
+// Get all questions
 router.route('/questions')
 	.get(function(req, res) {
 
@@ -91,82 +96,135 @@ router.route('/questions')
 				});
 	})
 
-// on routes that end in /bears
-// ----------------------------------------------------
-router.route('/submissions')
-	
+router.route('/tenants')
 	.get(function(req, res) {
-
-		var submission = new submission(); 
-		
-		submission.site = new site();
-		submission.site.site_id = "TonikEnergy";
-		submission.site.siteDomain = "TonikEnergy.com";
-
-		submission.person = new person();
-		submission.person.firstName = "Simon"
-		submission.person.lastName = "Parsons"
-
-		var a1 = new answer();
-		a1.question_id = 1;
-		a1.value = true;
-
-		var a2 = new answer();
-		a2.question = "Do you not have a problem if we dont not sell you to none of our pimps?";
-		a2.value = false;
-
-		submission.answers = [a1, a2]
-
-		submission.save(function(err) {
-			if (err)
-				res.send(err);
-
-			res.json({ message: 'submission created!' });
-		});
-
-	})
-
-	.post(function(req, res) {
-		
-		var submission = new submission(); 
-		
-		submission.site = new site();
-		submission.site.site_id = req.body.site.site_id;
-		submission.site.siteDomain = req.body.site.siteDomain;
-
-		submission.person = new person();
-		submission.person.firstName = req.body.person.firstName;
-		submission.person.lastName = req.body.person.lastName;
-
-		var a1 = new answer();
-		a1.question = req.body.answers[0].question;
-		a1.value = req.body.answers[0].value;
-
-		var a2 = new answer();
-		a2.question = req.body.answers[1].question;
-		a2.value = req.body.answers[1].value;
-
-		submission.answers = [a1, a2]
-
-		submission.save(function(err) {
-			if (err)
-				res.send(err);
-
-			res.json({ message: 'submission created!' });
-		});
-	})
-
-	.get(function(req, res) {
-		submission.find(function(err, submissions) {
-			if (err)
-				res.send(err);
-
-			res.json(submissions);
-		});
+		tenant.find({})
+			  .exec(function(err, t) {
+			  		if (!err) {
+			  			res.json(t);
+			  		}
+			  		else {
+			  			res.status(500).send('Something went wrong');
+			  		}
+			   });		
 	});
 
-// on routes that end in /bears/:bear_id
-// ----------------------------------------------------
+router.route('/people')
+	.get(function(req, res) {
+		person.find({})
+			  .exec(function(err, t) {
+			  		if (!err) {
+			  			res.json(t);
+			  		}
+			  		else {
+			  			res.status(500).send('Something went wrong');
+			  		}
+			   });		
+	});
+
+router.route('/sites')
+	.get(function(req, res) {
+		site.find({})
+			  .exec(function(err, t) {
+			  		if (!err) {
+			  			res.json(t);
+			  		}
+			  		else {
+			  			res.status(500).send('Something went wrong');
+			  		}
+			   });		
+	});
+
+router.route('/tenants/:tenant_id')
+	.get(function(req, res) {
+
+		var tenantQuery = {
+			tenantId : req.params.tenant_id
+		};
+
+		tenant.findOne(tenantQuery)
+			  .exec(function(err, t) {
+			  		if (!err) {
+			  			res.json(t);
+			  		}
+			  		else {
+			  			res.status(404).send('Tenant not found');
+			  		}
+			   });
+	});
+
+// Create a new submission
+router.route('/submissions')
+
+	.get(function(req, res) {
+
+		submission.find({})
+			  .exec(function(err, t) {
+			  		if (!err) {
+			  			res.json(t);
+			  		}
+			  		else {
+			  			res.status(500).send('Something went wront');
+			  		}
+			   });		
+	})
+	
+	.post(function(req, res) {
+
+		console.log("Posting new submission");
+		
+		var tenantQuery = {
+			tenantId : req.body.tenant_id
+		};
+
+		tenant.findOne(tenantQuery)
+			  .exec(function(err, t) {
+
+				 	if (t) {
+
+						var sub = new submission({
+							timestamp : new Date(), 
+							site : new site({
+					 			tenant_id	: t.id, 
+					 			siteDomain  : req.body.site_domain, 
+					 			path 		: req.body.site_path
+					 		}), 
+					 		person : new person({
+						 		externId 	: req.body.externId,
+								firstName 	: req.body.contact_firstName,
+								lastName 	: req.body.contact_lastName,
+								email 		: req.body.contact_email,
+								mobNumber 	: req.body.contact_mobNumber,
+								postcode 	: req.body.contact_postcode		
+					 		}), 
+					 		answer : _.map(req.body.answers, function(a) {
+					 			return new answer({
+					 				question_id : a.question_id, 
+					 				value : a.answer
+					 			})
+					 		})
+					 	});
+
+						sub.save(function(err, s) {
+							console.log(s);
+							if (!err) {
+								res.json({submission_id: s.id});	
+							}
+							else {
+								res.status(500).send('Something went wrong');		
+							}
+						});
+				 	}
+				 	else {
+				 		res.status(404).send('Tenant Id Not Found');
+				 	}
+				 	
+				});
+
+
+	})
+
+// Get an existing submission
 router.route('/submissions/:submission_id')
 
 	// get the bear with that id
