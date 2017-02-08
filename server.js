@@ -18,9 +18,17 @@ var tenant 		= require('./app/models/tenant');
 var site        = require('./app/models/site');
 var person		= require('./app/models/person');
 var answer      = require('./app/models/answer');
+var secret		= require('./app/models/secret');
+
+// utils
+var query		= require('./app/utils/queryHelper');
+var crypto		= require('./app/utils/securityHelper');
 
 // server config
 var port     	= process.env.PORT || 8080; 
+
+var ObjectId 	= mongoose.Types.ObjectId;
+
 
 // configure app
 app.use(morgan('dev')); // log requests to the console
@@ -38,8 +46,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(allowCrossDomain);
 
-https://cloud.mongodb.com/v2/587a8047c0c6e3132d5f156d#host/detail/11718443570e1f8b7bfa5a208c5c8a5e/status
+//https://cloud.mongodb.com/v2/587a8047c0c6e3132d5f156d#host/detail/11718443570e1f8b7bfa5a208c5c8a5e/status
 mongoose.connect('mongodb://parsonss:Hawk3rHunt3r$@dpaitcluster0-shard-00-00-543ez.mongodb.net:27017,dpaitcluster0-shard-00-01-543ez.mongodb.net:27017,dpaitcluster0-shard-00-02-543ez.mongodb.net:27017/admin?ssl=true&replicaSet=DPAITCluster0-shard-0&authSource=admin'); 
+
+
+
+
+
+
 
 // create our router
 var router = express.Router();
@@ -59,35 +73,10 @@ router.get('/', function(req, res) {
 router.route('/questions')
 	.get(function(req, res) {
 
-		console.log("Obtaining the current list of questions");
-
-		var culture = req.query.culture;
-		if (!culture) culture = "en_GB";
-
-		var uiCulture = req.query.uiCulture;
-		if (!uiCulture) uiCulture = "en_GB";
-
-		var now = new Date();
-
-		var currentQuestionsQuery = {
-			culture: culture, 
-			uiCulture: uiCulture, 
-			validFrom: {
-				$lte: now
-			}, 
-			$or: [{
-					validUntil: null
-				 }, 
-				 {
-				 	validUntil: {
-				 		$gte: now
-				 	}
-				 }]
-			};
+		var currentQuestionsQuery = query.getCurrentQuestions(req.params.culture, req.query.uiCulture);
 
 		question.find(currentQuestionsQuery)
 				.exec(function(err, q) {
-
 				 	if (!err) {
 				 		res.json(q);	
 				 	}
@@ -97,6 +86,7 @@ router.route('/questions')
 				});
 	})
 
+// Get all tenants
 router.route('/tenants')
 	.get(function(req, res) {
 		tenant.find({})
@@ -110,9 +100,10 @@ router.route('/tenants')
 			   });		
 	});
 
-router.route('/people')
+// Get all tenants
+router.route('/secrets')
 	.get(function(req, res) {
-		person.find({})
+		secret.find({})
 			  .exec(function(err, t) {
 			  		if (!err) {
 			  			res.json(t);
@@ -123,19 +114,7 @@ router.route('/people')
 			   });		
 	});
 
-router.route('/sites')
-	.get(function(req, res) {
-		site.find({})
-			  .exec(function(err, t) {
-			  		if (!err) {
-			  			res.json(t);
-			  		}
-			  		else {
-			  			res.status(500).send('Something went wrong');
-			  		}
-			   });		
-	});
-
+// Get a specific tenant
 router.route('/tenants/:tenant_id')
 	.get(function(req, res) {
 
@@ -152,7 +131,199 @@ router.route('/tenants/:tenant_id')
 			  			res.status(404).send('Tenant not found');
 			  		}
 			   });
+	})
+
+
+router.route('/tenants/:tenant_id/secret')
+	.get(function(req, res) {
+
+		var secretQuery = query.getSecret(req.params.tenant_id, req.query.date);
+
+		secret.find(secretQuery, (err, s) => {
+				if (!err) {
+					if (s) {
+						res.json(s)
+					}
+					else {
+						res.status(404).send('No valid secret found');
+					}
+				}
+				else {
+					res.status(500).send('Something went wrong');
+				}
+		});
+	})
+
+	.post(function(req, res) {
+
+		var dt = new Date();
+
+		var secretQuery = query.getSecret(req.params.tenant_id, dt);
+
+		// And create a new secret
+		var newSecret = new secret({
+			validFrom 	: dt, 
+			validUntil	: null, 
+			secret		: req.body.secret, 
+			tenant_id	: req.params.tenant_id
+		});
+
+		secret.findOne(secretQuery)
+			  .exec(function(err1, s1) {
+				if (!err1 && s1) {
+
+					// Set the valid until date on the old secret
+					s1.validUntil = dt;
+
+					s1.save(function(err2, s2) {
+						
+						console.log("Previous secret has been terminated");
+
+						newSecret.save(newSecret, function(err3, s3) {
+							console.log("New secret has been saved");
+						})
+					});
+				}
+				else {
+					console.log("No previous secret has been created");
+
+					newSecret.save(newSecret, function(err3, s3) {
+						console.log("New secret has been saved");
+					})
+				}
+			  });
+	})
+
+// Get an existing submission
+router.route('/tenants/:tenant_id/submissions/:id')
+
+	// get the bear with that id
+	.get(function(req, res) {
+
+		// The id is a valid MongoDB object id, so include this in the query
+		var query = {
+			'site.tenant_id' : req.params.tenant_id,
+			token			 : req.params.id
+		}
+		
+		submission.findOne(query, function(err, submission) {
+			if (!err && submission) {
+				res.json(submission);
+			}
+			else {
+				if (err) {
+					res.status(500).send('Something went wrong');
+				}
+				else {
+					res.status(404).send('No submission was found for the tenant and id provided.');	
+				}
+			}
+		});
+	})
+
+	// update the bear with this id
+	.put(function(req, res) {
+
+		// The id is a valid MongoDB object id, so include this in the query
+		var query = {
+			'site.tenant_id' : req.params.tenant_id,
+			token			 : req.params.id
+		}
+		
+		submission.findOne(query, function(err, submission) {
+			if (!err && submission) {
+				
+				// TODO Update the answers
+				// Save
+				// Trigger web hook?
+
+			}
+			else {
+				if (err) {
+					res.status(500).send('Something went wrong');
+				}
+				else {
+					res.status(404).send('No submission was found for the tenant and id provided.');	
+				}
+			}
+		});
 	});
+
+
+// Create a new submission
+router.route('/tenants/:tenant_id/submissions')
+
+	.post(function(req, res) {
+
+		tenant.findOne({ tenantId : req.params.tenant_id })
+			.exec(function(err, t) {
+
+				if (!err) {
+					if (t) {
+
+						// Obtain the secret user to encrypt the submission ids
+						var secretQuery = query.getSecret(t.id);
+
+						secret.findOne(secretQuery, (err, sec) => {
+							if (!err) {
+								if (sec) {
+									var newId = new ObjectId();
+
+									var sub = new submission({
+										_id: newId, 
+										timestamp : new Date(), 
+										token: crypto.encrypt({ t: t.id, s: newId }, sec.secret),
+										site : new site({
+											tenant_id	: t.id, 
+											siteDomain  : req.body.site_domain, 
+											path 		: req.body.site_path
+										}), 
+										person : new person({
+											externId 	: req.body.contact_externId,
+											firstName 	: req.body.contact_firstName,
+											lastName 	: req.body.contact_lastName,
+											email 		: req.body.contact_email,
+											mobNumber 	: req.body.contact_mobNumber,
+											postcode 	: req.body.contact_postcode		
+										}), 
+										answer : _.map(req.body.answers, function(a) {
+											return new answer({
+												question_id : a.question_id, 
+												value : a.answer
+											})
+										})
+									});
+
+									sub.save(function(err, s) {
+										console.log(err);
+
+										if (!err) {
+											res.json({submission_id: s.token});	
+										}
+										else {
+											res.status(500).send('Something went wrong');		
+										}
+									});
+								}
+								else {
+									res.status(404).send('No secret could be found');	
+								}
+							}
+							else {
+								res.status(500).send('Somethign went wrong');
+							}
+						});
+					}
+					else {
+						res.status(404).send('No tenant exists with the specified id');	
+					}
+				}
+				else {
+					res.status(500).send('Something went wrong');
+				}
+		});
+	});
+
 
 // Create a new submission
 router.route('/submissions')
@@ -169,93 +340,7 @@ router.route('/submissions')
 			  		}
 			   });		
 	})
-	
-	.post(function(req, res) {
 
-		console.log("Posting new submission");
-		
-		var tenantQuery = {
-			tenantId : req.body.tenant_id
-		};
-
-		tenant.findOne(tenantQuery)
-			  .exec(function(err, t) {
-
-				 	if (t) {
-
-						var sub = new submission({
-							timestamp : new Date(), 
-							site : new site({
-					 			tenant_id	: t.id, 
-					 			siteDomain  : req.body.site_domain, 
-					 			path 		: req.body.site_path
-					 		}), 
-					 		person : new person({
-						 		externId 	: req.body.externId,
-								firstName 	: req.body.contact_firstName,
-								lastName 	: req.body.contact_lastName,
-								email 		: req.body.contact_email,
-								mobNumber 	: req.body.contact_mobNumber,
-								postcode 	: req.body.contact_postcode		
-					 		}), 
-					 		answer : _.map(req.body.answers, function(a) {
-					 			return new answer({
-					 				question_id : a.question_id, 
-					 				value : a.answer
-					 			})
-					 		})
-					 	});
-
-						sub.save(function(err, s) {
-							console.log(s);
-							if (!err) {
-								res.json({submission_id: s.id});	
-							}
-							else {
-								res.status(500).send('Something went wrong');		
-							}
-						});
-				 	}
-				 	else {
-				 		res.status(404).send('Tenant Id Not Found');
-				 	}
-				 	
-				});
-
-
-	})
-
-// Get an existing submission
-router.route('/submissions/:submission_id')
-
-	// get the bear with that id
-	.get(function(req, res) {
-		submission.findById(req.params.submission_id, function(err, submission) {
-			if (err)
-				res.send(err);
-			res.json(submission);
-		});
-	})
-
-	// update the bear with this id
-	.put(function(req, res) {
-		submission.findById(req.params.submission_id, function(err, submission) {
-
-			if (err)
-				res.send(err);
-
-			/*submission.value = req.body.value;
-			answer.save(function(err) {
-				if (err)
-					res.send(err);
-
-				res.json({ message: 'Answer updated!' });
-			});
-			*/
-
-		});
-	});
-	
 
 // REGISTER OUR ROUTES -------------------------------
 app.use('/api', router);

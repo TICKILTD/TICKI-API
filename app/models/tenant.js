@@ -3,7 +3,8 @@ var schema       = mongoose.Schema;
 
 var tenantSchema = new schema({
 	tenantName  : String, 
-	tenantId	: String
+	tenantId	: String, 
+	secret		: String
 })
 
 module.exports = mongoose.model('tenant', tenantSchema);

@@ -8,7 +8,8 @@ var answerSchema = require('./answer');
 var submissionSchema  = new schema({
 	id		 	: Number,
 	timestamp	: Date, 
-
+	token		: String, 
+	
 	site        : siteSchema.schema,  
 	person 		: personSchema.schema,
 	answer      : [answerSchema.schema]
