@@ -195,6 +195,36 @@ router.route('/tenants/:tenant_id/secret')
 	})
 
 // Get an existing submission
+router.route('/tenants/:tenant_id/submissions')
+
+	// get the bear with that id
+	.get(function(req, res) {
+
+		tenant.findOne({ tenantId : req.params.tenant_id}, (err1, t) => {
+			if (!err1 && t) {
+
+				submission.find( {'site.tenant_id' : t._id }, function(err, s) {
+					if (err) {
+						res.status(500).send('Something went wrong');
+					}
+					else {
+						res.json(s);
+					}
+				});
+			}
+			else {
+				if (err1) {
+					res.status(500).send('Something went wrong');
+				}
+				else {
+					res.status(404).send('No tenant could be found with the specified id');	
+				}
+			}
+		})
+	})
+
+
+// Get an existing submission
 router.route('/tenants/:tenant_id/submissions/:id')
 
 	// get the bear with that id
