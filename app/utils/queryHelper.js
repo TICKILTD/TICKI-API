@@ -1,13 +1,13 @@
-var ObjectId = require('mongoose').Types.ObjectId;
+var objectId 	= require('mongoose').Types.ObjectId;
 
 var queryHelper = {
-	
-    getSecret : (tenant_id, effectiveOn) => {
+
+    getSecretQuery : (tenant_id, effectiveOn) => {
 
 		var dt = new Date();
 		if (effectiveOn) dt = new Date(effectiveOn);
 
-		var o_id = new ObjectId(tenant_id);
+		var o_id = new objectId(tenant_id);
 
 		var secretQuery = {
 			tenant_id : o_id,
