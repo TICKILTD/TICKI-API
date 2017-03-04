@@ -5,8 +5,9 @@ var secretSchema = new schema({
 	validFrom    : Date,
 	validUntil   : Date,
     secret       : String,  
+    tenant_id    : String, 
 
-	tenant_id: {
+	tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'
     }

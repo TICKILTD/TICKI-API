@@ -4,11 +4,10 @@ var schema       = mongoose.Schema;
 var tenantSchema = new schema({
 	tenantName  		: String, 
 	tenantId			: String, 
-	secret				: String, 
 
 	status				: String, 
-	statisDescription 	: String, 
-	statusUpdatedOn		: String
+	statusDescription 	: String, 
+	statusUpdatedOn		: Date
 })
 
 module.exports = mongoose.model('tenant', tenantSchema);

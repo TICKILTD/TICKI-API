@@ -10,7 +10,8 @@ module.exports = function(router){
 
     // Get all tenants
     router.route('/tenants')
-        .get(function(req, res) {
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
+        .get((req, res) => {
             tenant.find({})
                 .exec(function(err, t) {
                         if (!err) {
@@ -20,13 +21,57 @@ module.exports = function(router){
                             res.status(500).send('Something went wrong');
                         }
                 });		
+        })
+
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
+        .post((req, res) => {
+
+            var dt = new Date()
+
+            var newTenant = new tenant({
+                
+                tenantName  		: req.body.name,
+                tenantId             : req.body.tenantId, 
+                status              : 'trial', 
+                statusDescription   : '', 
+                statusUpdatedOn     : dt
+            });
+
+            newTenant.save((err1, t) => {
+
+                if (!err1 && t) {
+
+                    var newSecret = new secret({
+                        validFrom 	: dt, 
+                        validUntil	: null, 
+                        secret		: crypto.generateSecret(), 
+                        tenant_id	: req.params.tenant_id, 
+                        tenant      : t._id
+                    });
+
+                    newSecret.save((err2, s) => {
+                        if (!err2 && s) {
+                            res.json(t);
+                        }
+                        else {
+                            console.log(err1);
+                            res.status(500).send('Something went wrong');
+                        }
+                    })    
+                }
+                else {
+                    console.log(err1);
+                    res.status(500).send('Something went wrong');
+                }
+            })
         });
 
     // Get a specific tenant
     router.route('/tenants/:tenant_id')
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
         .get(function(req, res) {
 
-            tenant.findOne({ tenantId : id }, (err, t) => {
+            tenant.findOne({ tenantId : req.params.tenant_id }, (err, t) => {
                 if (!err && t) {
                     res.json(t);
                 }
@@ -42,9 +87,10 @@ module.exports = function(router){
         });
 
     router.route('/tenants/:tenant_id/secret')
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
         .get(function(req, res) {
 
-            var secretQuery = utils.getSecretQuery(req.params.tenant_id, req.query.date)
+            var secretQuery = queryHelper.getSecretQuery(req.params.tenant_id, req.query.date)
 
             secret.find(secretQuery, (err, s) => {
                 if (!err && s) {
@@ -59,56 +105,88 @@ module.exports = function(router){
                     }
                 }
 
-            })
+            })        
         })
 
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
         .post(function(req, res) {
 
             var dt = new Date();
 
-            var secretQuery = query.getSecret(req.params.tenant_id, dt);
+            tenant.findOne({ tenantId : req.params.tenant_id }, (err, t) => {
+                if (!err && t) {
 
-            // And create a new secret
-            var newSecret = new secret({
-                validFrom 	: dt, 
-                validUntil	: null, 
-                secret		: req.body.secret, 
-                tenant_id	: req.params.tenant_id
-            });
+                    var secretQuery = queryHelper.getSecretQuery(req.params.tenant_id, dt);
 
-            secret.findOne(secretQuery)
-                .exec(function(err1, s1) {
-                    if (!err1 && s1) {
+                    // And create a new secret
+                    var newSecret = new secret({
+                        validFrom 	: dt, 
+                        validUntil	: null, 
+                        secret		: crypto.generateSecret(), 
+                        tenant_id	: req.params.tenant_id, 
+                        tenant      : t._id
+                    });
 
-                        // Set the valid until date on the old secret
-                        s1.validUntil = dt;
+                    console.log(newSecret);
 
-                        s1.save(function(err2, s2) {
-                            
-                            console.log("Previous secret has been terminated");
+                    secret.findOne(secretQuery)
+                        .exec(function(err1, s1) {
+                            if (!err1 && s1) {
 
-                            newSecret.save(newSecret, function(err3, s3) {
-                                console.log("New secret has been saved");
-                            })
+                                // Set the valid until date on the old secret
+                                s1.validUntil = dt;
+
+                                s1.save(function(err2, s2) {
+                                    
+                                    console.log("Previous secret has been terminated");
+
+                                    newSecret.save(newSecret, function(err3, s3) {
+                                        if (!err3 && s3) {
+                                            console.log("New secret has been saved");
+                                            res.json({ previous: s2, current: s3});
+                                        }
+                                        else {
+                                            console.log(err);
+                                            res.status(500).send('Something went wrong');
+                                        }
+                                    })
+                                });
+                            }
+                            else {
+                                console.log("No previous secret has been created");
+
+                                newSecret.save(newSecret, function(err3, s3) {
+                                    if (!err3 && s3) {
+                                        console.log("New secret has been saved");
+                                        res.json({current : s3});
+                                    }
+                                    else {
+                                        console.log(err);
+                                        res.status(500).send('Something went wrong');
+                                    }
+                                })
+                            }
                         });
+                }
+                else {
+                    if (err) {
+                        res.status(500).send('Something went wrong');
                     }
                     else {
-                        console.log("No previous secret has been created");
-
-                        newSecret.save(newSecret, function(err3, s3) {
-                            console.log("New secret has been saved");
-                        })
+                        res.status(404).send('No tenant could be found with the specified id');	
                     }
-                })
-            });
+                }
+            })
+        });
 
     router.route('/tenants/:tenant_id/status')
 
-        // Get the status of the tenant
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
         .get((req, res) => {
 
-            tenant.findOne({ tenantId : req.params.tenant_id}, (err1, t) => {
-                if (!err1 && t) {
+            tenant.findOne({ tenantId : req.params.tenant_id}, (err, t) => {
+                
+                if (!err && t) {
                     res.json({ 
                         status 				: t.status, 
                         statusDescription 	: t.statusDescription, 
@@ -123,27 +201,47 @@ module.exports = function(router){
                         res.status(404).send('No tenant could be found with the specified id');	
                     }
                 }
-            })
-
-            getTenant(req.params.tenant_id, res, (t) => {
-                res.json({ 
-                    status 				: t.status, 
-                    statusDescription 	: t.statusDescription, 
-                    statusUpdatedOn 	: t.statusUpdatedOn
-                });
             });
         })
 
-        // Update the status of a tenant
-        .post((req ,res) => {
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
+        .put((req ,res) => {
 
+            tenant.findOne({ tenantId : req.params.tenant_id}, (err1, t1) => {
+                if (!err1 && t1) {
+
+                    t1.status = req.body.status;
+                    t1.statusDescription = req.body.statusDescription;
+                    t1.statusUpdatedOn = req.body.statusUpdatedOn;
+
+                    t1.save((err2, t2) => {
+
+                        if (!err2 && t2) {
+                            res.json({ 
+                                status 				: t2.status, 
+                                statusDescription 	: t2.statusDescription, 
+                                statusUpdatedOn 	: t2.statusUpdatedOn
+                            });
+                        }
+                        else {
+                            res.status(500).send('Something went wrong');		
+                        }
+                    });
+                }
+                else {
+                    if (err1) {
+                        res.status(500).send('Something went wrong');
+                    }
+                    else {
+                        res.status(404).send('No tenant could be found with the specified id');	
+                    }
+                }
+            })
         });
 
-
-    // Get an existing submission
     router.route('/tenants/:tenant_id/submissions')
 
-        // get the bear with that id
+        // TODO: SECURITY:  REQUIRES PRIVATE TENANT ACCESS
         .get((req, res) => {
 
             tenant.findOne({ tenantId : req.params.tenant_id}, (err1, t) => {
@@ -169,66 +267,7 @@ module.exports = function(router){
             })
         })
 
-
-    // Get an existing submission
-    router.route('/tenants/:tenant_id/submissions/:id')
-
-        // get the bear with that id
-        .get((req, res) => {
-
-            // The id is a valid MongoDB object id, so include this in the query
-            var query = {
-                'site.tenant_id' : req.params.tenant_id,
-                token			 : req.params.id
-            }
-            
-            submission.findOne(query, function(err, submission) {
-                if (!err && submission) {
-                    res.json(submission);
-                }
-                else {
-                    if (err) {
-                        res.status(500).send('Something went wrong');
-                    }
-                    else {
-                        res.status(404).send('No submission was found for the tenant and id provided.');	
-                    }
-                }
-            });
-        })
-
-        // update the bear with this id
-        .put(function(req, res) {
-
-            // The id is a valid MongoDB object id, so include this in the query
-            var query = {
-                'site.tenant_id' : req.params.tenant_id,
-                token			 : req.params.id
-            }
-            
-            submission.findOne(query, function(err, submission) {
-                if (!err && submission) {
-                    
-                    // TODO Update the answers
-                    // Save
-                    // Trigger web hook?
-
-                }
-                else {
-                    if (err) {
-                        res.status(500).send('Something went wrong');
-                    }
-                    else {
-                        res.status(404).send('No submission was found for the tenant and id provided.');	
-                    }
-                }
-            });
-        });
-
-
-    // Create a new submission
-    router.route('/tenants/:tenant_id/submissions')
-
+        // TODO: SECURITY: REQUIRED PUBLIC ACCESS
         .post(function(req, res) {
 
             tenant.findOne({ tenantId : req.params.tenant_id })
@@ -297,11 +336,67 @@ module.exports = function(router){
                     else {
                         res.status(500).send('Something went wrong');
                     }
+            })
+        });
+
+
+    router.route('/tenants/:tenant_id/submissions/:id')
+
+        // TODO: SECURITY:  REQUIRES PUBLIC ACCESS
+        .get((req, res) => {
+
+            // The id is a valid MongoDB object id, so include this in the query
+            var query = {
+                'site.tenant_id' : req.params.tenant_id,
+                token			 : req.params.id
+            }
+            
+            submission.findOne(query, function(err, submission) {
+                if (!err && submission) {
+                    res.json(submission);
+                }
+                else {
+                    if (err) {
+                        res.status(500).send('Something went wrong');
+                    }
+                    else {
+                        res.status(404).send('No submission was found for the tenant and id provided.');	
+                    }
+                }
+            });
+        })
+
+        // TODO: SECURITY:  REQUIRES PUBLIC ACCESS
+        .put(function(req, res) {
+
+            // The id is a valid MongoDB object id, so include this in the query
+            var query = {
+                'site.tenant_id' : req.params.tenant_id,
+                token			 : req.params.id
+            }
+            
+            submission.findOne(query, function(err, submission) {
+                if (!err && submission) {
+                    
+                    // TODO Update the answers
+                    // Save
+                    // Trigger web hook?
+
+                }
+                else {
+                    if (err) {
+                        res.status(500).send('Something went wrong');
+                    }
+                    else {
+                        res.status(404).send('No submission was found for the tenant and id provided.');	
+                    }
+                }
             });
         });
 
-        // Get all questions
         router.route('/tenants/:tenant_id/questions')
+
+            // TODO: SECURITY:  REQUIRES PUBLIC ACCESS
             .get(function(req, res) {
 
                 // TODO: Currently returning generic questions, however they should be linked to a tenant

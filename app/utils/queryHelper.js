@@ -7,10 +7,8 @@ var queryHelper = {
 		var dt = new Date();
 		if (effectiveOn) dt = new Date(effectiveOn);
 
-		var o_id = new objectId(tenant_id);
-
 		var secretQuery = {
-			tenant_id : o_id,
+			tenant_id : tenant_id,
 			validFrom: {
 				$lte: dt
 			}, 
@@ -27,7 +25,6 @@ var queryHelper = {
 		return secretQuery;
 	},
 	 
-
 	getCurrentQuestions : (culture, uiCulture) => {
 
 		if (!culture) culture = "en_GB";
