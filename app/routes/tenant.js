@@ -179,6 +179,27 @@ module.exports = function(router){
             })
         });
 
+    router.route('/tenants/:tenant_id/subscription')
+        // TODO: SECURITY:  REQUIRES ADMIN ACCESS
+        .get((req, res) => {
+            tenant.findOne({ tenantId : req.params.tenant_id}, (err, t) => {
+                
+                if (!err && t) {
+                    res.json({ 
+                        subscriptionId : t.subscriptionId
+                    });
+                }
+                else {
+                    if (err1) {
+                        res.status(500).send('Something went wrong');
+                    }
+                    else {
+                        res.status(404).send('No tenant could be found with the specified id');	
+                    }
+                }
+            });
+        });
+
     router.route('/tenants/:tenant_id/status')
 
         // TODO: SECURITY:  REQUIRES ADMIN ACCESS
@@ -213,6 +234,7 @@ module.exports = function(router){
                     t1.status = req.body.status;
                     t1.statusDescription = req.body.statusDescription;
                     t1.statusUpdatedOn = req.body.statusUpdatedOn;
+                    t1.subscriptionId = req.body.subscriptionId;
 
                     t1.save((err2, t2) => {
 
@@ -220,7 +242,8 @@ module.exports = function(router){
                             res.json({ 
                                 status 				: t2.status, 
                                 statusDescription 	: t2.statusDescription, 
-                                statusUpdatedOn 	: t2.statusUpdatedOn
+                                statusUpdatedOn 	: t2.statusUpdatedOn, 
+                                subscriptionId      : t2.subscriptionId
                             });
                         }
                         else {
